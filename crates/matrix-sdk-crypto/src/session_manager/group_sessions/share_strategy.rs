@@ -99,6 +99,8 @@ pub enum CollectStrategy {
     ///
     /// [MSC4153]: https://github.com/matrix-org/matrix-doc/pull/4153
     OnlyTrustedDevices,
+
+    YOLO,
 }
 
 impl CollectStrategy {
@@ -125,6 +127,7 @@ enum CollectStrategyDeserializationHelper {
     ErrorOnVerifiedUserProblem,
     IdentityBasedStrategy,
     OnlyTrustedDevices,
+    YOLO,
 }
 
 impl From<CollectStrategyDeserializationHelper> for CollectStrategy {
@@ -149,6 +152,7 @@ impl From<CollectStrategyDeserializationHelper> for CollectStrategy {
             ErrorOnVerifiedUserProblem => CollectStrategy::ErrorOnVerifiedUserProblem,
             IdentityBasedStrategy => CollectStrategy::IdentityBasedStrategy,
             OnlyTrustedDevices => CollectStrategy::OnlyTrustedDevices,
+            YOLO => CollectStrategy::YOLO,
         }
     }
 }
@@ -374,6 +378,21 @@ pub(crate) async fn collect_recipients_for_share_strategy(
                     ?user_id,
                     "CollectStrategy::OnlyTrustedDevices: Considering recipient devices"
                 );
+                let user_devices = store.get_device_data_for_user_filtered(user_id).await?;
+                let device_owner_identity = store.get_user_identity(user_id).await?;
+
+                let recipient_devices = split_devices_for_user_for_only_trusted_devices(
+                    user_devices,
+                    &own_identity,
+                    &device_owner_identity,
+                );
+
+                update_recipients_for_user(&mut result, outbound, user_id, recipient_devices);
+            }
+        }
+
+        CollectStrategy::YOLO => {
+            for user_id in users {
                 let user_devices = store.get_device_data_for_user_filtered(user_id).await?;
                 let device_owner_identity = store.get_user_identity(user_id).await?;
 
@@ -639,6 +658,25 @@ pub(crate) async fn split_devices_for_share_strategy(
                 }
             }
         }
+
+        CollectStrategy::YOLO => {
+            for device in devices.iter() {
+                let user_id = device.user_id();
+                let device_owner_identity = get_user_identity(user_id).await?;
+
+                if let Some(withheld_code) =
+                    withheld_code_for_device_for_only_trusted_devices_strategy(
+                        device,
+                        &own_identity,
+                        &device_owner_identity,
+                    )
+                {
+                    blocked_devices.push((device.clone(), withheld_code));
+                } else {
+                    allowed_devices.push(device.clone());
+                }
+            }
+        }
     }
 
     if !verified_users_with_new_identities.is_empty() {
@@ -736,6 +774,12 @@ pub(crate) async fn withheld_code_for_device_for_share_strategy(
                 device_owner_identity,
             ))
         }
+
+        CollectStrategy::YOLO => Ok(withheld_code_for_device_for_only_trusted_devices_strategy(
+            device,
+            own_identity,
+            device_owner_identity,
+        )),
     }
 }
 

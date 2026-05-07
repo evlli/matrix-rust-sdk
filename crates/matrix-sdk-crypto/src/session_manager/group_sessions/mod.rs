@@ -837,9 +837,9 @@ impl GroupSessionManager {
                 );
                 &CollectStrategy::IdentityBasedStrategy
             }
-            CollectStrategy::IdentityBasedStrategy | CollectStrategy::OnlyTrustedDevices => {
-                collect_strategy
-            }
+            CollectStrategy::IdentityBasedStrategy
+            | CollectStrategy::OnlyTrustedDevices
+            | CollectStrategy::YOLO => collect_strategy,
         };
 
         let mut changes = Changes::default();
